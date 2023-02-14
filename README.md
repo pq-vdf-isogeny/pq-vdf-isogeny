@@ -3,7 +3,6 @@
 ### Usage
 
 ```shell
-cd code
 sage VDF.sage -h
 usage: VDF.sage.py [-h] [-lambda LAM] [-t TIME] [-a ATTEMPTS]
 
