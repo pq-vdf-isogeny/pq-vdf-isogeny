@@ -1,81 +1,68 @@
 set_verbose(-1)
 
-def Coefficient(h, n):
-    """
-    Helper function to make things look similar!
-    """
-    return h[n]
-
-def FromProdToJac(C, P_c, Q_c, P, Q, a):
+def FromProdToJac(C, E, P_c, Q_c, P, Q, a):
     Fp2 = C.base()
-    R.<x> = PolynomialRing(Fp2)
+    Rx.<x> = Fp2[]
 
     P_c2 = 2^(a-1)*P_c
     Q_c2 = 2^(a-1)*Q_c
     P2 = 2^(a-1)*P
     Q2 = 2^(a-1)*Q
 
-    alp1 = P_c2[0]
-    alp2 = Q_c2[0]
-    alp3 = (P_c2 + Q_c2)[0]
-    bet1 = P2[0]
-    bet2 = Q2[0]
-    bet3 = (P2 + Q2)[0]
-    a1 = (alp3 - alp2)^2/(bet3 - bet2) + (alp2 - alp1)^2/(bet2 - bet1) + (alp1 - alp3)^2/(bet1 - bet3)
-    b1 = (bet3 - bet2)^2/(alp3 - alp2) + (bet2 - bet1)^2/(alp2 - alp1) + (bet1 - bet3)^2/(alp1 - alp3)
-    a2 = alp1*(bet3 - bet2) + alp2*(bet1 - bet3) + alp3*(bet2 - bet1)
-    b2 = bet1*(alp3 - alp2) + bet2*(alp1 - alp3) + bet3*(alp2 - alp1)
-    Deltalp = (alp1 - alp2)^2*(alp1 - alp3)^2*(alp2 - alp3)^2
-    Deltbet = (bet1 - bet2)^2*(bet1 - bet3)^2*(bet2 - bet3)^2
+    a1, a2, a3 = P_c2[0], Q_c2[0], (P_c2 + Q_c2)[0]
+    b1, b2, b3 = P2[0], Q2[0], (P2 + Q2)[0]
 
-    A = Deltbet*a1/a2
-    B = Deltalp*b1/b2
+    # Compute coefficients
+    M = Matrix(Fp2, [
+        [a1*b1, a1, b1],
+        [a2*b2, a2, b2],
+        [a3*b3, a3, b3]])
+    R, S, T = M.inverse() * vector(Fp2, [1,1,1])
+    RD = R * M.determinant()
+    da = (a1 - a2)*(a2 - a3)*(a3 - a1)
+    db = (b1 - b2)*(b2 - b3)*(b3 - b1)
 
-    h  = - (A*(alp2 - alp1)*(alp1 - alp3)*x^2 + B*(bet2 - bet1)*(bet1 - bet3)) 
-    h *=   (A*(alp3 - alp2)*(alp2 - alp1)*x^2 + B*(bet3 - bet2)*(bet2 - bet1)) 
-    h *=   (A*(alp1 - alp3)*(alp3 - alp2)*x^2 + B*(bet1 - bet3)*(bet3 - bet2))
+    s1, t1 = - da / RD, db / RD
+    s2, t2 = -T/R, -S/R
 
-    t1 = -(A/B)*b2/b1
-    t2 = (bet1*(bet3 - bet2)^2/(alp3 - alp2) + bet2*(bet1 - bet3)^2/(alp1 - alp3) + bet3*(bet2 - bet1)^2/(alp2 - alp1))/b1
-    s1 = -(B/A)*a2/a1
-    s2 = (alp1*(alp3 - alp2)^2/(bet3 - bet2) + alp2*(alp1 - alp3)^2/(bet1 - bet3) + alp3*(alp2 - alp1)^2/(bet2 - bet1))/a1
+    a1_t = (a1 - s2) / s1
+    a2_t = (a2 - s2) / s1
+    a3_t = (a3 - s2) / s1
+    h = s1 * (x^2 - a1_t) * (x^2 - a2_t) * (x^2 - a3_t)
 
     H = HyperellipticCurve(h)
     J = H.jacobian()
 
-    # We need the image of (P_c, P) and (Q_c, Q) in J
-    # The image of (P_c, P) is the image of P_c as a divisor on H
-    # plus the image of P as a divisor on H.
-    # This allows for direct computation without solving equations
-    # as in Castryck-Decru's paper.
+    def isogeny(pair):
+        # Argument members may be None to indicate the zero point.
 
-    # The projection maps are:
-    # H->C: (xC = s1/x²+s2, yC = (Deltbet/A³)(y/x³))
-    # so we compute Mumford coordinates of the divisor f^-1(P_c): a(x), y-b(x)
-    xPc, yPc = P_c.xy()
-    mumPc = [x^2 - s1 / (xPc - s2), yPc * x^3 * A^3 / Deltbet]
-    JPc = J(mumPc)
-    # same for Q_c
-    xQc, yQc = Q_c.xy()
-    mumQc = [x^2 - s1 / (xQc - s2), yQc * x^3 * A^3 / Deltbet]
-    JQc = J(mumQc)
+        # The projection maps are:
+        # H->C: (xC = s1/x²+s2, yC = s1 y)
+        # so we compute Mumford coordinates of the divisor f^-1(P_c): a(x), y-b(x)
+        Pc, P = pair
+        if Pc:
+            xPc, yPc = Pc.xy()
+            JPc = J([s1 * x^2 + s2 - xPc, Rx(yPc / s1)])
+        # Same for E
+        # H->E: (xE = t1 x² + t2, yE = t1 y/x^3)
+        if P:
+            xP, yP = P.xy()
+            JP = J([(xP - t2) * x^2 - t1, yP * x^3 / t1])
+        if Pc and P:
+            return JPc + JP
+        if Pc:
+            return JPc
+        if P:
+            return JP
 
-    # Same for E
-    # H->E: (xE = t1 x² + t2, yE = (Deltalp/B³)y)
-    xP, yP = P.xy()
-    JP = J([t1* x^2 + t2 - xP, R(yP * B^3 / Deltalp)])
-    xQ, yQ = Q.xy()
-    JQ = J([t1* x^2 + t2 - xQ, R(yQ * B^3 / Deltalp)])
+    imPcP = isogeny((P_c, P))
+    imQcQ = isogeny((Q_c, Q))
 
-    imPcP = JP + JPc
-    imQcQ = JQ + JQc
-
-    # Validate result
-    # For debugging
+    # Validate result, for debugging
     # def projC(_x, _y):
-    #     return (s1 / _x^2 + s2, Deltbet / A^3 * _y / _x^3)
+    #     return (s1 * _x^2 + s2, s1 * _y)
     # def projE(_x, _y):
-    #     return (t1 * _x^2 + t2, Deltalp / B^3 * _y)
+    #     return (t1 / _x^2 + t2, t1 * _y / _x^3)
     # Fp4 = Fp2.extension(2)
     # E4 = E.change_ring(Fp4)
     # C4 = C.change_ring(Fp4)
@@ -86,7 +73,7 @@ def FromProdToJac(C, P_c, Q_c, P, Q, a):
     # assert 2*E4(Q) == sum(E4(*projE(*pt)) for pt in divQ)
     # assert 2*C4(Q_c) == sum(C4(*projC(*pt)) for pt in divQ)
 
-    return h, imPcP[0], imPcP[1], imQcQ[0], imQcQ[1]
+    return h, imPcP[0], imPcP[1], imQcQ[0], imQcQ[1], isogeny
 
 class RichelotCorr:
     """
@@ -141,6 +128,7 @@ class RichelotCorr:
         U, V = D
         if not U[2].is_one():
             U = U / U[2]
+        V = V  % U
         # Sum and product of (xa, xb)
         s, p = -U[1], U[0]
         # Compute X coordinates (non reduced, degree 4)
@@ -178,7 +166,7 @@ class RichelotCorr:
         _, Py1inv, _ = Py1.xgcd(Px)
         Py = (- Py1inv * (Py2 * self.hnew + Py0)) % Px
         assert Px.degree() == 4
-        assert Py.degree() == 3
+        assert Py.degree() <= 3
 
         Dx = ((self.hnew - Py ** 2) // Px)
         Dy = (-Py) % Dx
@@ -218,8 +206,7 @@ def jacobian_iter_double(h, u, v, n):
 def FromJacToJac(h, D11, D12, D21, D22, a, powers=None):
     # power is an optional list of precomputed tuples
     # (l, 2^l D1, 2^l D2) where l < a are increasing
-    R = h.parent()
-    x = R.gen()
+    R,x = h.parent().objgen()
     Fp2 = R.base()
 
     #J = HyperellipticCurve(h).jacobian()
@@ -254,11 +241,9 @@ def FromJacToJac(h, D11, D12, D21, D22, a, powers=None):
     #assert 2^a*D1 == 0
     #assert 2^a*D2 == 0
     G3, r3 = h.quo_rem(G1 * G2)
-    #assert r3 == 0
+    assert r3 == 0
 
-    delta = Matrix(Fp2, 3, 3, [Coefficient(G1, 0), Coefficient(G1, 1), Coefficient(G1, 2),
-                              Coefficient(G2, 0), Coefficient(G2, 1), Coefficient(G2, 2),
-                              Coefficient(G3, 0), Coefficient(G3, 1), Coefficient(G3, 2)])
+    delta = Matrix(G.padded_list(3) for G in (G1,G2,G3))
     # H1 = 1/det (G2[1]*G3[0] - G2[0]*G3[1])
     #        +2x (G2[2]*G3[0] - G3[2]*G2[0])
     #        +x^2(G2[1]*G3[2] - G3[1]*G2[2])
@@ -278,64 +263,190 @@ def FromJacToJac(h, D11, D12, D21, D22, a, powers=None):
     if next_powers:
         next_powers = [(l, R.map(_D1), R.map(_D2))
             for l, _D1, _D2 in next_powers]
-    return hnew, imD1[0], imD1[1], imD2[0], imD2[1], next_powers
+    return hnew, imD1[0], imD1[1], imD2[0], imD2[1], R.map, next_powers
 
-def Does22ChainSplit(C, P_c, Q_c, P, Q, a):
-    Fp2 = C.base()
+def FromJacToProd(G1, G2, G3):
+    """
+    Construct the "split" isogeny from Jac(y^2 = G1*G2*G3)
+    to a product of elliptic curves.
+
+    This computation is the same as Benjamin Smith
+    see 8.3 in http://iml.univ-mrs.fr/~kohel/phd/thesis_smith.pdf
+    """
+    h = G1*G2*G3
+    R = h.parent()
+    Fp2 = R.base()
+    x = R.gen()
+
+    M = Matrix(G.padded_list(3) for G in (G1,G2,G3))
+    # Find homography
+    u, v, w = M.right_kernel().gen()
+    d = u/2
+    (ad, _), (b, _) = (x^2 - v*x + w*d/2).roots()
+    a = ad/d
+
+    # Apply transform G(x) -> G((a*x+b)/(x+d))*(x+d)^2
+    # The coefficients of x^2 are M * (1, a, a^2)
+    # The coefficients of 1 are M * (d^2, b*d, b^2)
+    H11, H21, H31 = M * vector([1, a, a*a])
+    H10, H20, H30 = M * vector([d*d, b*d, b*b])
+    assert G1((a*x+b)/(x+d))*(x+d)**2 == H11*x^2+H10
+
+    h2 = (H11*x^2+H10)*(H21*x^2+H20)*(H31*x^2+H30)
+    H2 = HyperellipticCurve(h2)
+
+    p1 = (H11*x+H10)*(H21*x+H20)*(H31*x+H30)
+    p2 = (H11+H10*x)*(H21+H20*x)*(H31+H30*x)
+    # We will need to map to actual elliptic curve
+    p1norm = (x + H10*H21*H31)*(x + H20*H11*H31)*(x + H30*H11*H21)
+    p2norm = (x + H11*H20*H30)*(x + H21*H10*H30)*(x + H31*H10*H20)
+    E1 = EllipticCurve([0, p1norm[2], 0, p1norm[1], p1norm[0]])
+    E2 = EllipticCurve([0, p2norm[2], 0, p2norm[1], p2norm[0]])
+
+    def morphE1(x, y):
+        # from y^2=p1 to y^2=p1norm
+        return (H11*H21*H31*x, H11*H21*H31*y)
+    def morphE2(x, y):
+        # from y^2=p1 to y^2=p2norm
+        return (H10*H20*H30*x, H10*H20*H30*y)
+    # The morphisms are:
+    # inverse homography:
+    # H->H2: x, y => ((b-dx) / (x-a), y/(x-a)^3)
+    # then H2->E1:(x,y) => (x^2,y)
+    #   or H2->E2:(x,y) => (1/x^2,y/x^3)
+
+    def isogeny(D):
+        HyperellipticCurve(h).jacobian()(D)
+        # To map a divisor, perform the change of coordinates
+        # on Mumford coordinates
+        U, V = D
+        # apply homography
+        # y = v1 x + v0 => 
+        U_ = U[0] * (x+d)^2 + U[1]*(a*x+b)*(x+d) + U[2]*(a*x+b)^2
+        V_ = V[0] * (x+d)^3 + V[1]*(a*x+b)*(x+d)^2
+        V_ = V_ % U_
+        v1, v0 = V_[1], V_[0]
+        # prepare symmetric functions
+        s = - U_[1] / U_[2]
+        p = U_[0] / U_[2]
+        # compute Mumford coordinates on E1
+        # Points x1, x2 map to x1^2, x2^2
+        U1 = x^2 - (s*s - 2*p)*x + p^2
+        # y = v1 x + v0 becomes (y - v0)^2 = v1^2 x^2
+        # so 2v0 y-v0^2 = p1 - v1^2 xH^2 = p1 - v1^2 xE1
+        V1 = (p1 - v1^2 * x + v0^2) / (2*v0)
+        # Reduce Mumford coordinates to get a E1 point
+        V1 = V1 % U1
+        U1red = (p1 - V1**2) // U1
+        xP1 = -U1red[0] / U1red[1]
+        yP1 = V1(xP1)
+        assert yP1**2 == p1(xP1)
+        # Same for E2
+        # Points x1, x2 map to 1/x1^2, 1/x2^2
+        U2 = x^2 - (s*s-2*p)/p^2*x + 1/p^2
+        # yE = y1/x1^3, xE = 1/x1^2
+        # means yE = y1 x1 xE^2
+        # (yE - y1 x1 xE^2)(yE - y2 x2 xE^2) = 0
+        # p2 - yE (x1 y1 + x2 y2) xE^2 + (x1 y1 x2 y2 xE^4) = 0
+        V21 = x^2 * (v1 * (s*s-2*p) + v0*s)
+        V20 = p2 + x^4 * (p*(v1^2*p + v1*v0*s + v0^2))
+        # V21 * y = V20
+        _, V21inv, _ = V21.xgcd(U2)
+        V2 = (V21inv * V20) % U2
+        #assert V2**2 % U2 == p2 % U2
+        # Reduce coordinates
+        U2red = (p2 - V2**2) // U2
+        xP2 = -U2red[0] / U2red[1]
+        yP2 = V2(xP2)
+        #assert yP2**2 == p2(xP2)
+
+        return E1(morphE1(xP1, yP1)), E2(morphE2(xP2, yP2))
+
+    return isogeny, (E1, E2)
+
+def Does22ChainSplit(E0,C, E, P_c, Q_c, P, Q, a):
+    """
+    Returns None if the chain does not split
+    or a tuple (chain of isogenies, codomain (E1, E2))
+    """
+    chain = []
     # gluing step
-    h, D11, D12, D21, D22 = FromProdToJac(C, P_c, Q_c, P, Q, a);
+    h, D11, D12, D21, D22, f = FromProdToJac(C, E, P_c, Q_c, P, Q, a)
+    chain.append(f)
     next_powers = None
-    # print(f"order 2^{a-1} on hyp curve {h}")
+    # print(f"order 2^{a-1} on hyp curve ...")
     for i in range(1,a-2+1):
-        h, D11, D12, D21, D22, next_powers = FromJacToJac(
+        h, D11, D12, D21, D22, f, next_powers = FromJacToJac(
             h, D11, D12, D21, D22, a-i, powers=next_powers)
+        chain.append(f)
         # print(f"order 2^{a - i - 1} on hyp curve {h}")
     # now we are left with a quadratic splitting: is it singular?
     G1 = D11
     G2 = D21
-    G3 = h // (G1*G2)
-    # print(G1, G2, G3)
+    G3, r3 = h.quo_rem(G1 * G2)
+    assert r3 == 0
 
-    delta = Matrix(Fp2, 3, 3, [Coefficient(G1, 0), Coefficient(G1, 1), Coefficient(G1, 2),
-                               Coefficient(G2, 0), Coefficient(G2, 1), Coefficient(G2, 2),
-                               Coefficient(G3, 0), Coefficient(G3, 1), Coefficient(G3, 2)])
-    delta = delta.determinant();
-    return delta == 0
+    delta = Matrix(G.padded_list(3) for G in (G1,G2,G3))
+    if delta.determinant():
+        return False
+
+    # Finish chain
+    f, codomain = FromJacToProd(G1, G2, G3)
+    chain.append(f)
+
+    # verifying the isogenies having product codomain passing through E0
+    for F in codomain:
+        if F.j_invariant() == E0.j_invariant():
+            return True
+    
+    return False
 
 def OddCyclicSumOfSquares(n, factexpl, provide_own_fac):
     return NotImplemented
 
 def Pushing3Chain(E, P, i):
     """
-    Compute chain of isogenies quotienting 
+    Compute chain of isogenies quotienting
     out a point P of order 3^i
+
+    https://trac.sagemath.org/ticket/34239
     """
-    chain = []
-    C = E
-    remainingker = P
-    # for j in [1..i] do
-    for j in range(1, i+1):
-        ker = 3^(i-j)*remainingker
-        comp = EllipticCurveIsogeny(C, [ker], degree=3, check=False)
-        C = comp.codomain()
-        remainingker = comp(remainingker)
-        chain.append(comp)
-    return C, chain
+    def rec(Q, k):
+        assert k
+        if k == 1:  # base case
+#            assert Q and not 3*Q
+            return [EllipticCurveIsogeny(Q.curve(), Q, degree=3, check=False)]
+
+        k1 = int(k * .8 + .5)
+        k1 = max(1, min(k-1, k1))  # clamp to [1, k-1]
+
+        Q1 = 3^k1 * Q
+        L = rec(Q1, k-k1)
+
+        Q2 = Q
+        for psi in L:
+            Q2 = psi(Q2)
+        R = rec(Q2, k1)
+
+        return L + R
+
+    chain = rec(P, i)
+    return chain[-1].codomain(), chain
 
 def AuxiliaryIsogeny(i, u, v, E_start, P2, Q2, tauhatkernel, two_i):
     """
-    Compute the distored  kernel using precomputed u,v and the 
+    Compute the distored  kernel using precomputed u,v and the
     automorphism two_i.
 
     This is used to construct the curve C from E_start and we
     compute the image of the points P_c and Q_c
     """
     tauhatkernel_distort = u*tauhatkernel + v*two_i(tauhatkernel)
-    
+
     C, tau_tilde = Pushing3Chain(E_start, tauhatkernel_distort, i)
-    P_c = u*P2 + v*two_i(P2)
-    Q_c = u*Q2 + v*two_i(Q2)
-    for taut in tau_tilde:
-        P_c = taut(P_c)
-        Q_c = taut(Q_c)
-    return C, P_c, Q_c
+    def chain(P):
+        Pc = u*P + v*two_i(P)
+        for taut in tau_tilde:
+            Pc = taut(Pc)
+        return Pc
+    return C, chain(P2), chain(Q2), chain
