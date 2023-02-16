@@ -3,6 +3,7 @@
 ### Usage
 
 ```shell
+cd code
 sage VDF.sage -h
 usage: VDF.sage.py [-h] [-lambda LAM] [-t TIME] [-a ATTEMPTS]
 
@@ -15,6 +16,24 @@ options:
                         How many attempts the algorithm should try to find a smoother solution
 ```
 
+### Example
+
+```shell
+sage VDF.sage -lambda 64 -t 2^8
+setup took 0.03s
+This is the prime p
+276597292449876995672594681154659942399
+The bit size of p is 128
+This is the factorisation of N
+[[3, 3], [5, 2], [17, 2], [43, 1]]
+This is b: 23
+This is ell: 383
+The bit size of ell is 9
+Eval took 210.67s
+verify offline took 0.06s
+verify online took 0.35s
+total verify took 0.42s
+```
 
 ## Credits
 
