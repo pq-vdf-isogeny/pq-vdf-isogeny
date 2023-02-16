@@ -1,7 +1,7 @@
 set_verbose(-1)
 
 def FromProdToJac(C, E, P_c, Q_c, P, Q, a):
-    Fp2 = C.base()
+    Fp2 = E.base()
     Rx.<x> = Fp2[]
 
     P_c2 = 2^(a-1)*P_c

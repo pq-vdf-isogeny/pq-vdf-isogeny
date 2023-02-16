@@ -54,8 +54,8 @@ def Verify(E0,P1,Q1,P1p,Q1p,E1,E1p,p,b,N_list,l):
     print("verify offline took %0.2fs" % (t1off - t0off))
 
     t0on = time.time()
-    assert Does22ChainSplit(E0,E2,E1, l*P2,  l*Q2, x*P1, x*Q1, b)
-    assert Does22ChainSplit(E0,E2, E1p,l*P2,  l*Q2, x*P1p, x*Q1p, b)
+    assert Does22ChainSplit(E0,E1,E2, x*P1, x*Q1, l*P2, l*Q2, b)
+    assert Does22ChainSplit(E0,E1p, E2,x*P1p, x*Q1p,l*P2,  l*Q2, b)
     t1on = time.time()
     print("verify online took %0.2fs" % (t1on - t0on))
     t1 = time.time()

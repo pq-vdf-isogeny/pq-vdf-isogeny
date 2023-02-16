@@ -156,7 +156,7 @@ def Setup(lam, t, attempts = None):
     j = E0.j_invariant()
     t1  = time.time()
     
-    print("It took %0.2fs" % (t1 - t0))
+    print("setup took %0.2fs" % (t1 - t0))
     print("This is the prime p")
     print(p)
     print(f"The bit size of p is {ceil(log(p,2))}")
