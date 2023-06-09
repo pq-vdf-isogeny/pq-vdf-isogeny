@@ -5,7 +5,7 @@ load('montgomery.sage')
 proof.arithmetic(False)# Speeds things up in Sage
 import collections
 
-PARALLEL_CPUS = 4
+PARALLEL_CPUS = 2
 
 def Eval(p,b,l,j):
 
@@ -21,7 +21,7 @@ def Eval(p,b,l,j):
         E1 = phiP.codomain()
         P1 = phiP(P0); 
         Q1 = phiP(Q0)
-        return E1.j_invariant(),P1,Q1
+        return E1,P1,Q1
 
     def KerpolyFromPoint(P,n,A):
         xs = []
@@ -52,18 +52,21 @@ def Eval(p,b,l,j):
     cofactor = (p^k+1)//l
 
     t0 = time.time()
+    # using elligator 2
+    u = Fpk.random_element()
+    x1 = A/(u^2-1)
+    x2 = -x1 -A
 
     inputs = []
-    for _ in range(PARALLEL_CPUS):  
-        x = Fpk.random_element()
-        inputs.append((x,Fp,K,A,cofactor,l,P0,Q0))        
+    inputs.append((x1,Fp,K,A,cofactor,l,P0,Q0))     
+    inputs.append((x2,Fp,K,A,cofactor,l,P0,Q0))    
 
     results = list(compute_isogeny(inputs))
     result_dict = {}
 
     for result in results:
         (_, f_output) = result
-        result_dict[f_output[0]] = f_output
+        result_dict[f_output[0].j_invariant()] = f_output
 
     # asserting both directions has been computed
     assert len(result_dict) == 2
@@ -77,9 +80,8 @@ def Eval(p,b,l,j):
         else:
             E1p,P1p,Q1p = result_dict[key]
 
-    assert E1 != E1p
+    assert E1.j_invariant() != E1p.j_invariant()
 
     t1 = time.time()
-    print("Eval took %0.2fs" % (t1 - t0))
+    print_info("Eval took %0.2fs" % (t1 - t0))
     return P1,Q1,P1p,Q1p,E1,E1p
-

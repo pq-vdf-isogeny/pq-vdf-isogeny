@@ -1,4 +1,4 @@
-set_verbose(-1)
+load("util.sage")
 
 def FromProdToJac(C, E, P_c, Q_c, P, Q, a):
     Fp2 = E.base()
@@ -354,24 +354,35 @@ def FromJacToProd(G1, G2, G3):
         _, V21inv, _ = V21.xgcd(U2)
         V2 = (V21inv * V20) % U2
         #assert V2**2 % U2 == p2 % U2
-        # Reduce coordinates
-        U2red = (p2 - V2**2) // U2
-        xP2 = -U2red[0] / U2red[1]
+        
+        if V2 == 0:
+            xP2 = 0
+        else:
+            # Reduce coordinates
+            U2red = (p2 - V2**2) // U2
+            xP2 = -U2red[0] / U2red[1]
+        
         yP2 = V2(xP2)
         #assert yP2**2 == p2(xP2)
 
-        return E1(morphE1(xP1, yP1)), E2(morphE2(xP2, yP2))
+        if xP2 == 0 and yP2 == 0:
+            PE2 = E2(0)
+        else:
+            PE2 =E2(morphE2(xP2, yP2))    
+
+        return E1(morphE1(xP1, yP1)),PE2
 
     return isogeny, (E1, E2)
 
-def Does22ChainSplit(E0,C, E, P_c, Q_c, P, Q, a):
+def Does22ChainSplit(E1, E0, P_c, Q_c, P, Q, a, c, d):
     """
     Returns None if the chain does not split
     or a tuple (chain of isogenies, codomain (E1, E2))
     """
+
     chain = []
     # gluing step
-    h, D11, D12, D21, D22, f = FromProdToJac(C, E, P_c, Q_c, P, Q, a)
+    h, D11, D12, D21, D22, f = FromProdToJac(E1, E0, P_c, Q_c, P, Q, a)
     chain.append(f)
     next_powers = None
     # print(f"order 2^{a-1} on hyp curve ...")
@@ -394,59 +405,24 @@ def Does22ChainSplit(E0,C, E, P_c, Q_c, P, Q, a):
     f, codomain = FromJacToProd(G1, G2, G3)
     chain.append(f)
 
-    # verifying the isogenies having product codomain passing through E0
-    for F in codomain:
-        if F.j_invariant() == E0.j_invariant():
-            return True
-    
+    Pc,Qc = base_torsion(E1,c)
+    Pd,Qd = base_torsion(E0,d)
+ 
+    def evaluate_chain(Phi, X, E):
+        for f in Phi:
+            X = f(X)   
+        for x in X:
+            if x.curve().is_isomorphic(E):
+                return x
+        
+        return E.random_point()
+
+    LPc = evaluate_chain(chain, (Pc, E0(0)), E0)
+    LQc = evaluate_chain(chain, (Qc,E0(0)), E0)
+    LPd = evaluate_chain(chain, (E1(0), Pd),E0)
+    LQd = evaluate_chain(chain, (E1(0), Qd),E0)
+
+    if LPc.is_zero() and LQc.is_zero() and LPd.is_zero() and LQd.is_zero(): 
+        return True 
+
     return False
-
-def OddCyclicSumOfSquares(n, factexpl, provide_own_fac):
-    return NotImplemented
-
-def Pushing3Chain(E, P, i):
-    """
-    Compute chain of isogenies quotienting
-    out a point P of order 3^i
-
-    https://trac.sagemath.org/ticket/34239
-    """
-    def rec(Q, k):
-        assert k
-        if k == 1:  # base case
-#            assert Q and not 3*Q
-            return [EllipticCurveIsogeny(Q.curve(), Q, degree=3, check=False)]
-
-        k1 = int(k * .8 + .5)
-        k1 = max(1, min(k-1, k1))  # clamp to [1, k-1]
-
-        Q1 = 3^k1 * Q
-        L = rec(Q1, k-k1)
-
-        Q2 = Q
-        for psi in L:
-            Q2 = psi(Q2)
-        R = rec(Q2, k1)
-
-        return L + R
-
-    chain = rec(P, i)
-    return chain[-1].codomain(), chain
-
-def AuxiliaryIsogeny(i, u, v, E_start, P2, Q2, tauhatkernel, two_i):
-    """
-    Compute the distored  kernel using precomputed u,v and the
-    automorphism two_i.
-
-    This is used to construct the curve C from E_start and we
-    compute the image of the points P_c and Q_c
-    """
-    tauhatkernel_distort = u*tauhatkernel + v*two_i(tauhatkernel)
-
-    C, tau_tilde = Pushing3Chain(E_start, tauhatkernel_distort, i)
-    def chain(P):
-        Pc = u*P + v*two_i(P)
-        for taut in tau_tilde:
-            Pc = taut(Pc)
-        return Pc
-    return C, chain(P2), chain(Q2), chain
