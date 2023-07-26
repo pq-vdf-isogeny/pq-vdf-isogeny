@@ -15,6 +15,8 @@ options:
   -t TIME, --time TIME  Desired puzzle complexities
 ```
 
+**N.B. The prime number used in the default parameters (256 bits) should be considered as a proof-of-concept and does not meet the security requirements.**
+
 ### Example
 
 ```shell
